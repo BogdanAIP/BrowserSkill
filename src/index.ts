@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { registerBrowserWorkflowTools } from "./workflow-tools.mjs";
 import * as z from "zod/v4";
 
 import { spawn } from "node:child_process";
@@ -366,19 +367,20 @@ function addFlag(args, flag, enabled) {
 const server = new McpServer(
   {
     name: "browserskill-chatgpt",
-    version: "0.2.1",
+    version: "0.3.0",
   },
   {
     instructions:
       "Use BrowserSkill to operate the user's real Chrome or Edge browser. " +
       "Only BrowserSkill sessions created by this MCP server may be controlled. " +
-      "Default to EXISTING USER TABS FIRST. For a task involving a website or web app, after starting a session first inspect existing user tabs with browser_tabs action=list and scope=user. " +
-      "If a suitable user tab is already open, prefer borrowing that existing tab instead of creating a new tab or navigating a new page. Borrow it, perform the task, and return it before stopping the session. " +
-      "Do not require the user to mention borrow, return, existing tab, or user tab explicitly. Infer this workflow automatically when appropriate. " +
-      "Only create or navigate a new page when no suitable user tab exists, the user explicitly asks for a new page or tab, or borrowing is denied or unavailable. " +
-      "When using a borrowed tab, preserve the user's original page and state when possible and do not navigate it away unless the task requires that navigation. " +
-      "For read-only requests, do not send messages, submit forms, change settings, delete content, or otherwise modify user data unless the user asks. " +
-      "Always return borrowed user tabs before stopping the BrowserSkill session. " +
+      "For normal website and web-app tasks prefer the high-level browser_acquire -> browser_act -> browser_release workflow. " +
+      "browser_acquire automatically checks existing user tabs first, borrows a suitable existing tab when available, and otherwise may open the supplied fallback URL. " +
+      "Do not require the user to mention borrow, return, session ids, tab ids, scope, or BrowserSkill mechanics. Infer the workflow automatically. " +
+      "Keep high-level calls minimal: normally browser_acquire only needs a target and optional fallback url, browser_act only needs the unfinished explicit steps, and browser_release needs no arguments while the current workflow is active. " +
+      "Use browser_act for explicit browser operations such as observing, clicking, filling, pressing keys, navigation, tabs, files, downloads, emulation, or request-help. " +
+      "Use only actions required by the user's request; read-only requests must not send, submit, delete, change settings, or otherwise modify user data. " +
+      "Always call browser_release when a high-level workflow is finished so borrowed tabs are returned and the BrowserSkill session is stopped. " +
+      "The original low-level tools remain available as a fallback when the high-level workflow is insufficient. " +
       "Borrowing an existing user tab remains governed by the BrowserSkill extension confirmation setting.",
   }
 );
@@ -2211,6 +2213,30 @@ server.registerTool(
     }
   }
 );
+
+
+registerBrowserWorkflowTools({
+  server,
+  runJson,
+  ensureBskDaemon,
+  transferDir: BSK_TRANSFER_DIR,
+
+  claimSession: (id) => {
+    ownedSessions.add(id);
+    currentSession = id;
+  },
+
+  releaseSession: (id) => {
+    ownedSessions.delete(id);
+
+    if (currentSession === id) {
+      currentSession =
+        [...ownedSessions].at(-1) ||
+        null;
+    }
+  },
+});
+
 
 await serveStdio(
   () => server
