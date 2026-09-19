@@ -375,6 +375,7 @@ const server = new McpServer(
       "For normal website and web-app tasks prefer the high-level browser_acquire -> browser_act -> browser_release workflow. " +
       "browser_acquire automatically checks existing user tabs first, borrows a suitable existing tab when available, and otherwise may open the supplied fallback URL. " +
       "Do not require the user to mention borrow, return, session ids, tab ids, scope, or BrowserSkill mechanics. Infer the workflow automatically. " +
+      "Keep high-level calls minimal: normally browser_acquire only needs a target and optional fallback url, browser_act only needs the unfinished explicit steps, and browser_release needs no arguments while the current workflow is active. " +
       "Use browser_act for explicit browser operations such as observing, clicking, filling, pressing keys, navigation, tabs, files, downloads, emulation, or request-help. " +
       "Use only actions required by the user's request; read-only requests must not send, submit, delete, change settings, or otherwise modify user data. " +
       "Always call browser_release when a high-level workflow is finished so borrowed tabs are returned and the BrowserSkill session is stopped. " +
@@ -697,8 +698,7 @@ server.registerTool(
 );
 
 
-/* =========================================================
-   browser_inspect
+/* =========================================================   browser_inspect
    ========================================================= */
 
 server.registerTool(
@@ -1397,7 +1397,6 @@ server.registerTool(
 
       url: z.string().optional(),
       no_active: z.boolean().optional(),
-
       index: z
         .number()
         .int()
@@ -2097,8 +2096,7 @@ server.registerTool(
         );
       }
 
-      if (
-        input.action === "download"
+      if (        input.action === "download"
       ) {
 
         if (!input.out) {
@@ -2797,8 +2795,7 @@ const workflowStepSchema =
         .positive()        .optional(),
 
     include_stack:
-      z.boolean()
-        .optional(),
+      z.boolean()        .optional(),
 
     probe_hover:
       z.boolean()
@@ -3498,7 +3495,6 @@ async function executeWorkflowStep(
         "width and height are required for resize."
       );
     }
-
     args = [
       "window",
       "resize",
@@ -4197,8 +4193,7 @@ server.registerTool(
 );
 
 
-server.registerTool(
-  "browser_act",
+server.registerTool(  "browser_act",
   {
     description:
       "Execute one or more explicit BrowserSkill actions inside an acquired workflow. Supports inspection, navigation, click/fill/press/select/scroll, tabs, files, downloads, resize/emulation, and request-help. Actual steps remain explicit so read/write effects are visible. Completed steps are never hidden: if a later step or post-action observation fails, the result reports partial completion instead of encouraging a blind retry.",
@@ -4457,5 +4452,4 @@ server.registerTool(
 await serveStdio(
   () => server
 );
-
 
