@@ -7,7 +7,8 @@
     "start": "tsx src/index.ts",
     "check": "node --check src/index.mjs && node --check src/workflow-tools.mjs",
     "smoke:tools": "node --import tsx src/tool-list-smoke.ts",
-    "test": "npm run check && npm run smoke:tools"
+    "test": "npm run check && npm run smoke:workflow && npm run smoke:tools",
+    "smoke:workflow": "node src/workflow-unit-smoke.ts"
   },
   "keywords": [],
   "author": "",
