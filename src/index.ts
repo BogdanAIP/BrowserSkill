@@ -697,7 +697,6 @@ server.registerTool(
 );
 
 
-
 /* =========================================================
    browser_inspect
    ========================================================= */
@@ -1397,7 +1396,6 @@ server.registerTool(
         .optional(),
 
       url: z.string().optional(),
-
       no_active: z.boolean().optional(),
 
       index: z
@@ -2099,7 +2097,6 @@ server.registerTool(
         );
       }
 
-
       if (
         input.action === "download"
       ) {
@@ -2797,8 +2794,7 @@ const workflowStepSchema =
     max_text_chars:
       z.number()
         .int()
-        .positive()
-        .optional(),
+        .positive()        .optional(),
 
     include_stack:
       z.boolean()
@@ -3497,8 +3493,7 @@ async function executeWorkflowStep(
   ) {
     if (
       !step.width ||
-      !step.height
-    ) {
+      !step.height    ) {
       throw new Error(
         "width and height are required for resize."
       );
@@ -4197,8 +4192,7 @@ server.registerTool(
         } catch {}
       }
 
-      return fail(error);
-    }
+      return fail(error);    }
   }
 );
 
@@ -4207,7 +4201,7 @@ server.registerTool(
   "browser_act",
   {
     description:
-      "Execute one or more explicit BrowserSkill actions inside an acquired workflow. Supports inspection, navigation, click/fill/press/select/scroll, tabs, files, downloads, resize/emulation, and request-help. Actual steps remain explicit so read/write effects are visible. By default a fresh observe is returned after action batches when a current tab remains.",
+      "Execute one or more explicit BrowserSkill actions inside an acquired workflow. Supports inspection, navigation, click/fill/press/select/scroll, tabs, files, downloads, resize/emulation, and request-help. Actual steps remain explicit so read/write effects are visible. Completed steps are never hidden: if a later step or post-action observation fails, the result reports partial completion instead of encouraging a blind retry.",
 
     inputSchema:
       z.object({
@@ -4238,42 +4232,69 @@ server.registerTool(
 
       const results = [];
       const images = [];
+      let failedStep = null;
 
       for (
-        const step of
-        input.steps
+        let index = 0;
+        index < input.steps.length;
+        index += 1
       ) {
-        const executed =
-          await executeWorkflowStep(
-            state,
-            step
-          );
+        const step =
+          input.steps[index];
 
-        results.push({
-          action:
-            executed.action,
+        try {
+          const executed =
+            await executeWorkflowStep(
+              state,
+              step
+            );
 
-          tab_id:
-            executed.tab_id,
+          results.push({
+            index,
+            action:
+              executed.action,
 
-          result:
-            executed.result,
-        });
+            tab_id:
+              executed.tab_id,
 
-        if (
-          executed.image
-        ) {
-          images.push(
+            result:
+              executed.result,
+          });
+
+          if (
             executed.image
-          );
+          ) {
+            images.push(
+              executed.image
+            );
+          }
+
+        } catch (caught) {
+          failedStep = {
+            index,
+            action:
+              step.action,
+
+            tab_id:
+              step.tab_id ??
+              state.tab_id,
+
+            error:
+              caught instanceof Error
+                ? caught.message
+                : String(caught),
+          };
+
+          break;
         }
       }
 
 
       let observation = null;
+      let observationError = null;
 
-      const lastAction =
-        input.steps.at(-1)
+      const lastCompletedAction =
+        results.at(-1)
           ?.action;
 
       const alreadyObserved =
@@ -4283,32 +4304,57 @@ server.registerTool(
           "html",
           "screenshot",
         ].includes(
-          lastAction
+          lastCompletedAction
         );
 
       if (
+        !failedStep &&
         input.observe_after !==
           false &&
         !alreadyObserved &&
         state.tab_id
       ) {
-        observation =
-          await runJson(
-            [
-              "observe",
-              "--session",
-              state.session_id,
-              "--tab-id",
-              String(
-                state.tab_id
-              ),
-            ],
-            130000
-          );
+        try {
+          observation =
+            await runJson(
+              [
+                "observe",
+                "--session",
+                state.session_id,
+                "--tab-id",
+                String(
+                  state.tab_id
+                ),
+              ],
+              130000
+            );
+
+        } catch (caught) {
+          observationError =
+            caught instanceof Error
+              ? caught.message
+              : String(caught);
+        }
       }
 
 
+      const status =
+        failedStep
+          ? (
+              results.length
+                ? "partial"
+                : "failed"
+            )
+          : (
+              observationError
+                ? "actions_completed_observation_failed"
+                : "ok"
+            );
+
+
       const payload = {
+        status,
+
         workflow_id:
           state.workflow_id,
 
@@ -4318,8 +4364,21 @@ server.registerTool(
         tab_id:
           state.tab_id,
 
-        results,
+        completed_steps:
+          results,
+
+        failed_step:
+          failedStep,
+
         observation,
+        observation_error:
+          observationError,
+
+        retry_guidance:
+          failedStep ||
+          observationError
+            ? "Do not blindly repeat completed write actions. Inspect completed_steps and current state first; retry only the unfinished operation when appropriate."
+            : null,
       };
 
       const content = [
@@ -4398,6 +4457,5 @@ server.registerTool(
 await serveStdio(
   () => server
 );
-
 
 
