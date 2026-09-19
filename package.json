@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "tsx src/index.ts",
-    "check": "node --check src/index.mjs",
+    "check": "node --check src/index.mjs && node --check src/workflow-tools.mjs",
     "smoke:tools": "node --import tsx src/tool-list-smoke.ts",
     "test": "npm run check && npm run smoke:tools"
   },
