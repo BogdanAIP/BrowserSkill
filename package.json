@@ -4,8 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "check": "node --check src/index.mjs",
+    "smoke:tools": "node --import tsx src/tool-list-smoke.ts",
+    "test": "npm run check && npm run smoke:tools"
   },
   "keywords": [],
   "author": "",
